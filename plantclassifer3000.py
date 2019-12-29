@@ -1,35 +1,42 @@
 import tensorflow as tf
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Dropout, Activation, Flatten, Conv2D, MaxPooling2D
+from tensorflow.keras.callbacks import TensorBoard
 import matplotlib.pyplot as plot
 import random 
 import numpy as np
 import cv2
 import os
 import pickle
+import time
 
 
-def initialize_model():
+
+def initialize_model(denselayers, layersize, convlayers):
     # create model
     model = Sequential()
 
     # add first convolutional layer with a 3x3 kernel
-    model.add(Conv2D(64, 3, 3, input_shape=(100, 100, 1)))
+    model.add(Conv2D(layersize, (3, 3), input_shape=(130, 130, 1)))
     model.add(Activation('relu'))
     model.add(MaxPooling2D(pool_size=(2, 2)))
 
-    model.add(Conv2D(64, 3, 3))
-    model.add(Activation('relu'))
-    model.add(MaxPooling2D(pool_size=(2, 2)))
+    # add as many conv layers as requested
+    for l in range(convlayers - 1):
+        model.add(Conv2D(layersize, (3, 3)))
+        model.add(Activation('relu'))
+        
+        model.add(MaxPooling2D(pool_size=(2, 2)))
+
+    # transform outputs from conv layers to 1D
+    model.add(Flatten())
 
     # create feed forward part of neural network
-    model.add(Flatten())
-    model.add(Dense(64))
-    model.add(Activation('relu'))
-    model.add(Dense(128))
-    model.add(Activation('relu'))
-    model.add(Dense(64))
-    model.add(Activation('relu'))
+    for l in range(denselayers):
+        model.add(Dense(layersize))
+        model.add(Activation('relu'))
+    
+    # add output layer
     model.add(Dense(12))
 
     # output activation must be probability for cross-entropy
@@ -39,9 +46,51 @@ def initialize_model():
 
     return model
 
-def train():
-    # get model
-    model = initialize_model()
+def pooling_after():
+    # create model
+    model = Sequential()
+
+    # add first convolutional layer with a 3x3 kernel
+    model.add(Conv2D(64, (3, 3), input_shape=(130, 130, 1)))
+    model.add(Activation('relu'))
+    model.add(Conv2D(64, (3, 3))
+    model.add(Activation('relu'))
+    model.add(MaxPooling2D(pool_size=(2, 2)))
+
+    # add as many conv layers as requested
+    model.add(Conv2D(128, (3, 3)))
+    model.add(Activation('relu'))
+    model.add(Conv2D(128, (3, 3)))
+    model.add(Activation('relu'))
+    model.add(MaxPooling2D(pool_size=(2, 2)))
+
+    model.add(Conv2D(256, (3, 3)))
+    model.add(Activation('relu'))
+    model.add(Conv2D(256, (3, 3)))
+    model.add(Activation('relu'))
+    model.add(MaxPooling2D(pool_size=(2, 2)))
+        
+    # transform outputs from conv layers to 1D
+    model.add(Flatten())
+
+    # create feed forward part of neural network
+    model.add(Dense(128))
+    model.add(Activation('relu'))
+    
+    # add output layer
+    model.add(Dense(12))
+
+    # output activation must be probability for cross-entropy
+    model.add(Activation('softmax'))
+
+    model.compile(loss='sparse_categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+
+    return model
+
+
+def train(model, name):
+    logdir = os.path.join('tb_logs', name)
+    tb = TensorBoard(log_dir=logdir)
     
     # open pickled data
     train_imgs = pickle.load(open('trainpickle/imgs/imgs.pickle', 'br'))/255.0 # normalize images
@@ -51,9 +100,21 @@ def train():
     train_labels = np.array(train_labels)
 
     # train and save model
-    model.fit(train_imgs, train_labels)
+    model.fit(train_imgs, train_labels, callbacks=[tb], epochs=10)
 
-    model.save('superseedlingseeer.model')
+    model.save(name + '.model')
+
+def test_variations():
+    dense_layers = [1, 3, 6]
+    layer_sizes = [32, 64]
+    conv_layers = [2, 3, 4]
+
+    for d in dense_layers:
+        for lsize in layer_sizes:
+            for c in conv_layers:
+                name = 'conv{}-size{}-dense{}-time{}'.format(c, lsize, d, int(time.time()))
+                model = initialize_model(d, lsize, c)
+                train(model, name)
 
 
 def extract_data():
@@ -66,7 +127,7 @@ def extract_data():
                     'Small-flowered Cranesbill', 'Sugar Beet']
 
     # standard img size to be used for all images
-    IMG_SIZE = 100
+    IMG_SIZE = 130
 
     train_data = []
 
@@ -107,4 +168,8 @@ def extract_data():
     pickled_y.close()
 
 #extract_data()
-train()
+#model = initialize_model(2, 64, 1)
+model = pooling_after()
+name = 'conv{}-size{}-dense{}-time{}'.format(1, 1, 1, int(time.time()))
+train(model, name)
+#test_variations()
